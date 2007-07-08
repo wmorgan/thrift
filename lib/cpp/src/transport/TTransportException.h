@@ -32,8 +32,7 @@ class TTransportException : public facebook::thrift::TException {
     ALREADY_OPEN = 2,
     TIMED_OUT = 3,
     END_OF_FILE = 4,
-    INTERRUPTED = 5,
-    BAD_ARGS = 6
+    INTERRUPTED = 5
   };
   
   TTransportException() :
@@ -44,11 +43,11 @@ class TTransportException : public facebook::thrift::TException {
     facebook::thrift::TException(), 
     type_(type) {}
 
-  TTransportException(const std::string& message) :
+  TTransportException(const std::string message) :
     facebook::thrift::TException(message),
     type_(UNKNOWN) {}
 
-  TTransportException(TTransportExceptionType type, const std::string& message) :
+  TTransportException(TTransportExceptionType type, const std::string message) :
     facebook::thrift::TException(message),
     type_(type) {}
 

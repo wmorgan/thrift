@@ -1,9 +1,3 @@
-// Copyright (c) 2006- Facebook
-// Distributed under the Thrift Software License
-//
-// See accompanying file LICENSE or visit the Thrift site at:
-// http://developers.facebook.com/thrift/
-
 #ifndef T_GLOBALS_H
 #define T_GLOBALS_H
 
@@ -53,7 +47,6 @@ extern t_program* g_program;
 
 extern t_type* g_type_void;
 extern t_type* g_type_string;
-extern t_type* g_type_binary;
 extern t_type* g_type_slist;
 extern t_type* g_type_bool;
 extern t_type* g_type_byte;

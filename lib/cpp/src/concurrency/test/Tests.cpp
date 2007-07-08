@@ -29,20 +29,14 @@ int main(int argc, char** argv) {
   if (runAll || args[0].compare("thread-factory") == 0) {
 
     ThreadFactoryTests threadFactoryTests;
-
+    
     std::cout << "ThreadFactory tests..." << std::endl;
-
+    
     size_t count =  1000;
-    size_t floodLoops =  1;
-    size_t floodCount =  100000;
 
     std::cout << "\t\tThreadFactory reap N threads test: N = " << count << std::endl;
 
     assert(threadFactoryTests.reapNThreads(count));
-
-    std::cout << "\t\tThreadFactory floodN threads test: N = " << floodCount << std::endl;
-
-    assert(threadFactoryTests.floodNTest(floodLoops, floodCount));
 
     std::cout << "\t\tThreadFactory synchronous start test" << std::endl;
 
@@ -59,15 +53,15 @@ int main(int argc, char** argv) {
 
     std::cout << "\t\tUtil minimum time" << std::endl;
 
-    int64_t time00 = Util::currentTime();
-    int64_t time01 = Util::currentTime();
+    long long time00 = Util::currentTime();
+    long long time01 = Util::currentTime();
 
     std::cout << "\t\t\tMinimum time: " << time01 - time00 << "ms" << std::endl;
 
     time00 = Util::currentTime();
     time01 = time00;
     size_t count = 0;
-
+    
     while (time01 < time00 + 10) {
       count++;
       time01 = Util::currentTime();
@@ -98,18 +92,13 @@ int main(int argc, char** argv) {
 
       size_t taskCount = 100000;
 
-      int64_t delay = 10LL;
+      long long delay = 10LL;
 
       std::cout << "\t\tThreadManager load test: worker count: " << workerCount << " task count: " << taskCount << " delay: " << delay << std::endl;
 
       ThreadManagerTests threadManagerTests;
 
       assert(threadManagerTests.loadTest(taskCount, delay, workerCount));
-
-      std::cout << "\t\tThreadManager block test: worker count: " << workerCount << " delay: " << delay << std::endl;
-
-      assert(threadManagerTests.blockTest(delay, workerCount));
-
     }
   }
 
@@ -125,7 +114,7 @@ int main(int argc, char** argv) {
 
       size_t tasksPerWorker = 1000;
 
-      int64_t delay = 10LL;
+      long long delay = 10LL;
 
       for (size_t workerCount = minWorkerCount; workerCount < maxWorkerCount; workerCount*= 2) {
 
@@ -140,3 +129,4 @@ int main(int argc, char** argv) {
     }
   }
 }
+

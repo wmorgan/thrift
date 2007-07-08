@@ -1,9 +1,3 @@
-// Copyright (c) 2006- Facebook
-// Distributed under the Thrift Software License
-//
-// See accompanying file LICENSE or visit the Thrift site at:
-// http://developers.facebook.com/thrift/
-
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sstream>
@@ -43,7 +37,7 @@ void t_php_generator::init_generator() {
 }
 
 /**
- * Prints standard php includes
+ * Prints standard java imports
  */
 string t_php_generator::php_includes() {
   return
@@ -115,22 +109,6 @@ void t_php_generator::generate_enum(t_enum* tenum) {
     indent(f_types_) <<
       "const " << (*c_iter)->get_name() << " = " << value << ";" << endl;
   }
-
-  indent(f_types_) <<
-    "static public $__names = array(" << endl;
-  value = -1;
-  for (c_iter = constants.begin(); c_iter != constants.end(); ++c_iter) {
-    if ((*c_iter)->has_value()) {
-      value = (*c_iter)->get_value();
-    } else {
-      ++value;
-    }
-
-    indent(f_types_) <<
-      "  " << value << " => '" << (*c_iter)->get_name() << "'," << endl;
-  }
-  indent(f_types_) <<
-    ");" << endl;
 
   indent_down();
   f_types_ << "}" << endl << endl;

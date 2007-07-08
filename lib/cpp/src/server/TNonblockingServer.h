@@ -10,7 +10,6 @@
 #include <Thrift.h>
 #include <server/TServer.h>
 #include <transport/TTransportUtils.h>
-#include <concurrency/ThreadManager.h>
 #include <stack>
 #include <event.h>
 
@@ -18,8 +17,6 @@ namespace facebook { namespace thrift { namespace server {
 
 using facebook::thrift::transport::TMemoryBuffer;
 using facebook::thrift::protocol::TProtocol;
-using facebook::thrift::concurrency::Runnable;
-using facebook::thrift::concurrency::ThreadManager;
 
 // Forward declaration of class
 class TConnection;
@@ -49,12 +46,6 @@ class TNonblockingServer : public TServer {
   // Whether to frame responses
   bool frameResponses_;
 
-  // For processing via thread pool, may be NULL
-  boost::shared_ptr<ThreadManager> threadManager_;
-
-  // Is thread pool processing?
-  bool threadPoolProcessing_;
-
   /**
    * This is a stack of all the objects that have been created but that
    * are NOT currently in use. When we close a connection, we place it on this
@@ -62,11 +53,6 @@ class TNonblockingServer : public TServer {
    * memory and reallocating a new object later.
    */
   std::stack<TConnection*> connectionStack_;
-
-  // Pointer to optional function called after opening the listen socket and
-  // before running the event loop, along with its argument data
-  void (*preServeCallback_)(void*);
-  void* preServeCallbackArg_;
 
   void handleEvent(int fd, short which);
 
@@ -76,27 +62,19 @@ class TNonblockingServer : public TServer {
     TServer(processor),
     serverSocket_(0),
     port_(port),
-    frameResponses_(true),
-    threadPoolProcessing_(false),
-    preServeCallback_(NULL),
-    preServeCallbackArg_(NULL) {}
+    frameResponses_(true) {}
 
   TNonblockingServer(boost::shared_ptr<TProcessor> processor, 
                      boost::shared_ptr<TProtocolFactory> protocolFactory,
-                     int port,
-                     boost::shared_ptr<ThreadManager> threadManager = boost::shared_ptr<ThreadManager>()) :
+                     int port) :
     TServer(processor),
     serverSocket_(0),
     port_(port),
-    frameResponses_(true),
-    threadManager_(threadManager), 
-    preServeCallback_(NULL),
-    preServeCallbackArg_(NULL) {
+    frameResponses_(true) {
     setInputTransportFactory(boost::shared_ptr<TTransportFactory>(new TTransportFactory()));
     setOutputTransportFactory(boost::shared_ptr<TTransportFactory>(new TTransportFactory()));
     setInputProtocolFactory(protocolFactory);
     setOutputProtocolFactory(protocolFactory);
-    setThreadManager(threadManager);
   }
 
   TNonblockingServer(boost::shared_ptr<TProcessor> processor,
@@ -104,36 +82,18 @@ class TNonblockingServer : public TServer {
                      boost::shared_ptr<TTransportFactory> outputTransportFactory,
                      boost::shared_ptr<TProtocolFactory> inputProtocolFactory,
                      boost::shared_ptr<TProtocolFactory> outputProtocolFactory,
-                     int port,
-                     boost::shared_ptr<ThreadManager> threadManager = boost::shared_ptr<ThreadManager>()) :
+                     int port) :
     TServer(processor),
     serverSocket_(0),
     port_(port),
-    frameResponses_(true),
-    threadManager_(threadManager),
-    preServeCallback_(NULL),
-    preServeCallbackArg_(NULL) {
+    frameResponses_(true) {
     setInputTransportFactory(inputTransportFactory);
     setOutputTransportFactory(outputTransportFactory);
     setInputProtocolFactory(inputProtocolFactory);
     setOutputProtocolFactory(outputProtocolFactory);
-    setThreadManager(threadManager);
   }
         
   ~TNonblockingServer() {}
-
-  void setThreadManager(boost::shared_ptr<ThreadManager> threadManager) {
-    threadManager_ = threadManager;
-    threadPoolProcessing_ = (threadManager != NULL);
-  }
-
-  bool isThreadPoolProcessing() {
-    return threadPoolProcessing_;
-  }
-
-  void addTask(boost::shared_ptr<Runnable> task) {
-    threadManager_->add(task);
-  }
 
   void setFrameResponses(bool frameResponses) {
     frameResponses_ = frameResponses;
@@ -152,12 +112,6 @@ class TNonblockingServer : public TServer {
   }
 
   void serve();
-
-  void setPreServeCallback(void(*fn_ptr)(void*), void* arg = NULL) {
-    preServeCallback_ = fn_ptr;
-    preServeCallbackArg_ = arg;
-  }
-
 };
 
 /**
@@ -179,7 +133,6 @@ enum TAppState {
   APP_INIT,
   APP_READ_FRAME_SIZE,
   APP_READ_REQUEST,
-  APP_WAIT_TASK,
   APP_SEND_FRAME_SIZE,
   APP_SEND_RESULT
 };
@@ -190,8 +143,6 @@ enum TAppState {
  */
 class TConnection {
  private:
-
-  class Task;
 
   // Server handle
   TNonblockingServer* server_;
@@ -234,12 +185,6 @@ class TConnection {
 
   // Frame size
   int32_t frameSize_;
-
-  // Task handle
-  int taskHandle_;
-
-  // Task event
-  struct event taskEvent_;
 
   // Transport to read from
   boost::shared_ptr<TMemoryBuffer> inputTransport_;
@@ -303,19 +248,9 @@ class TConnection {
 
   // Handler wrapper
   static void eventHandler(int fd, short which, void* v) {
-    assert(fd == ((TConnection*)v)->socket_);
+    assert(fd = ((TConnection*)v)->socket_);
     ((TConnection*)v)->workSocket();
   }
-  
-  // Handler wrapper for task block
-  static void taskHandler(int fd, short which, void* v) {
-    assert(fd == ((TConnection*)v)->taskHandle_);
-    if (-1 == ::close(((TConnection*)v)->taskHandle_)) {
-      GlobalOutput("TConnection::taskHandler close handle failed, resource leak");
-    }
-    ((TConnection*)v)->transition();
-  }
-
 };
 
 }}} // facebook::thrift::server

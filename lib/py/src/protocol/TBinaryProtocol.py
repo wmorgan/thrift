@@ -13,23 +13,13 @@ class TBinaryProtocol(TProtocolBase):
 
   """Binary implementation of the Thrift protocol driver."""
 
-  VERSION_MASK = 0xffff0000
-  VERSION_1 = 0x80010000
-
-  def __init__(self, trans, strictRead=False, strictWrite=True):
+  def __init__(self, trans):
     TProtocolBase.__init__(self, trans)
-    self.strictRead = strictRead
-    self.strictWrite = strictWrite
 
   def writeMessageBegin(self, name, type, seqid):
-    if self.strictWrite:
-      self.writeI32(TBinaryProtocol.VERSION_1 | type)
-      self.writeString(name)
-      self.writeI32(seqid)
-    else:
-      self.writeString(name)
-      self.writeByte(type)
-      self.writeI32(seqid)
+    self.writeString(name)
+    self.writeByte(type)
+    self.writeI32(seqid)
 
   def writeMessageEnd(self):
     pass
@@ -103,20 +93,9 @@ class TBinaryProtocol(TProtocolBase):
     self.trans.write(str)
 
   def readMessageBegin(self):
-    sz = self.readI32()
-    if sz < 0:
-      version = sz & TBinaryProtocol.VERSION_MASK
-      if version != TBinaryProtocol.VERSION_1:
-        raise TProtocolException(TProtocolException.BAD_VERSION, 'Bad version in readMessageBegin: %d' % (sz))
-      type = version & 0x000000ff
-      name = self.readString()
-      seqid = self.readI32()
-    else:
-      if self.strictRead:
-        raise TProtocolException(TProtocolException.BAD_VERSION, 'No protocol version header')
-      name = self.trans.readAll(sz)
-      type = self.readByte()
-      seqid = self.readI32()
+    name = self.readString()
+    type = self.readByte()
+    seqid = self.readI32()
     return (name, type, seqid)
 
   def readMessageEnd(self):
@@ -200,10 +179,6 @@ class TBinaryProtocol(TProtocolBase):
     return str
 
 class TBinaryProtocolFactory:
-  def __init__(self, strictRead=False, strictWrite=True):
-    self.strictRead = strictRead
-    self.strictWrite = strictWrite
-
   def getProtocol(self, trans):
-    prot = TBinaryProtocol(trans, self.strictRead, self.strictWrite)
+    prot = TBinaryProtocol(trans)
     return prot

@@ -1,9 +1,3 @@
-// Copyright (c) 2006- Facebook
-// Distributed under the Thrift Software License
-//
-// See accompanying file LICENSE or visit the Thrift site at:
-// http://developers.facebook.com/thrift/
-
 #ifndef T_JAVA_GENERATOR_H
 #define T_JAVA_GENERATOR_H
 
@@ -130,7 +124,7 @@ class t_java_generator : public t_oop_generator {
   std::string java_type_imports();
   std::string java_thrift_imports();
   std::string type_name(t_type* ttype, bool in_container=false, bool in_init=false);
-  std::string base_type_name(t_base_type* tbase, bool in_container=false);
+  std::string base_type_name(t_base_type::t_base tbase, bool in_container=false);
   std::string declare_field(t_field* tfield, bool init=false);
   std::string function_signature(t_function* tfunction, std::string prefix="");
   std::string argument_list(t_struct* tstruct);

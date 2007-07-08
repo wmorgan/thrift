@@ -4,25 +4,14 @@
 // See accompanying file LICENSE or visit the Thrift site at:
 // http://developers.facebook.com/thrift/
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #include "TFileTransport.h"
 #include "TTransportUtils.h"
 
 #include <pthread.h>
-#ifndef HAVE_CLOCK_GETTIME
-#include <time.h>
-#else
 #include <sys/time.h>
-#endif
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
-#ifdef HAVE_STRINGS_H
-#include <strings.h>
-#endif
 #include <iostream>
 #include <sys/stat.h>
 
@@ -32,29 +21,8 @@ using boost::shared_ptr;
 using namespace std;
 using namespace facebook::thrift::protocol;
 
-#ifndef HAVE_CLOCK_GETTIME
 
-/**
- * Fake clock_gettime for systems like darwin
- *
- * @author Paul Querna <pquerna@apache.org>
- */
-#define CLOCK_REALTIME 0 
-static int clock_gettime(int clk_id /*ignored*/, struct timespec *tp) {
-  struct timeval now;
-    
-  int rv = gettimeofday(&now, NULL);
-  if (rv != 0) {
-    return rv;
-  }
-    
-  tp->tv_sec = now.tv_sec;
-  tp->tv_nsec = now.tv_usec * 1000;
-  return 0;
-}
-#endif
-
-TFileTransport::TFileTransport(string path, bool readOnly)
+TFileTransport::TFileTransport(string path)
   : readState_()
   , readBuff_(NULL)
   , currentEvent_(NULL)
@@ -79,7 +47,6 @@ TFileTransport::TFileTransport(string path, bool readOnly)
   , offset_(0)
   , lastBadChunk_(0)
   , numCorruptedEventsInChunk_(0)
-  , readOnly_(readOnly)
 {
   // initialize all the condition vars/mutexes
   pthread_mutex_init(&mutex_, NULL);
@@ -90,7 +57,7 @@ TFileTransport::TFileTransport(string path, bool readOnly)
   openLogFile();
 }
 
-void TFileTransport::resetOutputFile(int fd, string filename, int64_t offset) {
+void TFileTransport::resetOutputFile(int fd, string filename, long long offset) {
   filename_ = filename;
   offset_ = offset;
 
@@ -99,8 +66,8 @@ void TFileTransport::resetOutputFile(int fd, string filename, int64_t offset) {
     // flush any events in the queue
     flush();
     fprintf(stderr, "error, current file (%s) not closed\n", filename_.c_str());
-    if (-1 == ::close(fd_)) {
-      GlobalOutput("TFileTransport: error in file close");
+    if(-1 == ::close(fd_)) {
+      perror("TFileTransport: error in file close");
       throw TTransportException("TFileTransport: error in file close");
     }
   }
@@ -117,9 +84,6 @@ void TFileTransport::resetOutputFile(int fd, string filename, int64_t offset) {
 TFileTransport::~TFileTransport() {
   // flush the buffer if a writer thread is active
   if (writerThreadId_ > 0) {
-    // reduce the flush timeout so that closing is quicker
-    setFlushMaxUs(300*1000);
-
     // flush output buffer
     flush();
 
@@ -158,7 +122,7 @@ TFileTransport::~TFileTransport() {
   // close logfile
   if (fd_ > 0) {
     if(-1 == ::close(fd_)) {
-      GlobalOutput("TFileTransport: error in file close");
+      perror("TFileTransport: error in file close");
     }
   }
 }
@@ -183,20 +147,7 @@ bool TFileTransport::initBufferAndWriteThread() {
   return true;
 }
 
-void TFileTransport::write(const uint8_t* buf, uint32_t len) {
-  if (readOnly_) {
-    throw TTransportException("TFileTransport: attempting to write to file opened readonly");
-  }
-
-  enqueueEvent(buf, len, false);
-}
-
 void TFileTransport::enqueueEvent(const uint8_t* buf, uint32_t eventLen, bool blockUntilFlush) {
-  // can't enqueue more events if file is going to close
-  if (closing_) {
-    return;
-  }
-
   // make sure that event size is valid
   if ( (maxEventSize_ > 0) && (eventLen > maxEventSize_) ) {
     T_ERROR("msg size is greater than max event size: %u > %u\n", eventLen, maxEventSize_);
@@ -302,19 +253,13 @@ void TFileTransport::writerThread() {
 
   while(1) {
     // this will only be true when the destructor is being invoked
-    if(closing_) {      
-      // empty out both the buffers
-      if (enqueueBuffer_->isEmpty() && dequeueBuffer_->isEmpty()) {
-        if (-1 == ::close(fd_)) {
-          GlobalOutput("TFileTransport: error in close");
-          throw TTransportException("TFileTransport: error in file close");
-        }
-        // just be safe and sync to disk
-        fsync(fd_);
-        fd_ = 0;
-        pthread_exit(NULL);
-        return;
+    if(closing_) {
+      if(-1 == ::close(fd_)) {
+        perror("TFileTransport: error in close");
+        throw TTransportException("TFileTransport: error in file close");
       }
+      fd_ = 0;
+      return;
     }
 
     if (swapEventBuffers(&ts_next_flush)) {
@@ -326,13 +271,13 @@ void TFileTransport::writerThread() {
         }
 
         // sanity check on event
-        if ((maxEventSize_ > 0) && (outEvent->eventSize_ > maxEventSize_)) {
+        if ( (maxEventSize_ > 0) && (outEvent->eventSize_ > maxEventSize_)) {
           T_ERROR("msg size is greater than max event size: %u > %u\n", outEvent->eventSize_, maxEventSize_);
           continue;
         }
 
         // If chunking is required, then make sure that msg does not cross chunk boundary
-        if ((outEvent->eventSize_ > 0) && (chunkSize_ != 0)) {
+        if( (outEvent->eventSize_ > 0) && (chunkSize_ != 0)) {
 
           // event size must be less than chunk size
           if(outEvent->eventSize_ > chunkSize_) {
@@ -341,11 +286,11 @@ void TFileTransport::writerThread() {
             continue;
           }
 
-          int64_t chunk1 = offset_/chunkSize_;
-          int64_t chunk2 = (offset_ + outEvent->eventSize_ - 1)/chunkSize_;
+          long long chunk1 = offset_/chunkSize_;
+          long long chunk2 = (offset_ + outEvent->eventSize_ - 1)/chunkSize_;
           
           // if adding this event will cross a chunk boundary, pad the chunk with zeros
-          if (chunk1 != chunk2) {
+          if(chunk1 != chunk2) {
             // refetch the offset to keep in sync
             offset_ = lseek(fd_, 0, SEEK_CUR);
             int32_t padding = (int32_t)(chunk2*chunkSize_ - offset_);
@@ -353,18 +298,18 @@ void TFileTransport::writerThread() {
             // sanity check
             if (padding <= 0) {
               T_DEBUG("Padding is empty, skipping event");
-              continue;
+            continue;
             }
             if (padding > (int32_t)chunkSize_) {
               T_DEBUG("padding is larger than chunk size, skipping event");
-              continue;
+            continue;
             }
             uint8_t zeros[padding];
             bzero(zeros, padding);
-            //T_DEBUG_L(1, "Adding padding of %u bytes at %lu (to reach chunk %lld)", 
-            //padding, offset_, chunk2);
-            if (-1 == ::write(fd_, zeros, padding)) {
-              GlobalOutput("TFileTransport: error while padding zeros");
+            //        T_DEBUG_L(1, "Adding padding of %u bytes at %lu (to reach chunk %lld)", 
+            //        padding, offset_, chunk2);
+            if(-1 == ::write(fd_, zeros, padding)) {
+              perror("TFileTransport: error while padding zeros");
               throw TTransportException("TFileTransport: error while padding zeros");
             }
             unflushed += padding;
@@ -373,9 +318,9 @@ void TFileTransport::writerThread() {
         }
 
         // write the dequeued event to the file
-        if (outEvent->eventSize_ > 0) {
-          if (-1 == ::write(fd_, outEvent->eventBuff_, outEvent->eventSize_)) {
-            GlobalOutput("TFileTransport: error while writing event");
+        if(outEvent->eventSize_ > 0) {
+          if(-1 == ::write(fd_, outEvent->eventBuff_, outEvent->eventSize_)) {
+            perror("TFileTransport: error while writing event");
             throw TTransportException("TFileTransport: error while writing event");
           }
 
@@ -413,10 +358,6 @@ void TFileTransport::writerThread() {
 }
 
 void TFileTransport::flush() {
-  // file must be open for writing for any flushing to take place
-  if (writerThreadId_ <= 0) {
-    return;
-  }
   // wait for flush to take place
   pthread_mutex_lock(&mutex_);
 
@@ -499,7 +440,7 @@ bool TFileTransport::readEvent() {
       // read error
       if (readState_.bufferLen_ == -1) {
         readState_.resetAllValues();
-        GlobalOutput("TFileTransport: error while reading from file");
+        perror("TFileTransport: error while reading from file");
         throw TTransportException("TFileTransport: error while reading from file");
       } else if (readState_.bufferLen_ == 0) {  // EOF
         // wait indefinitely if there is no timeout
@@ -655,7 +596,7 @@ void TFileTransport::performRecovery() {
       char errorMsg[1024];
       sprintf(errorMsg, "TFileTransport: log file corrupted at offset: %lu", 
               offset_ + readState_.lastDispatchPtr_);
-      GlobalOutput(errorMsg);
+      perror(errorMsg);
       throw TTransportException(errorMsg);
     }
   }
@@ -700,7 +641,7 @@ void TFileTransport::seekToChunk(int32_t chunk) {
   offset_ = lseek(fd_, newOffset, SEEK_SET);  
   readState_.resetAllValues();
   if (offset_ == -1) {
-    GlobalOutput("TFileTransport: lseek error in seekToChunk");
+    perror("TFileTransport: lseek error in seekToChunk");
     throw TTransportException("TFileTransport: lseek error in seekToChunk");
   }
 
@@ -739,20 +680,19 @@ uint32_t TFileTransport::getCurChunk() {
 
 // Utility Functions
 void TFileTransport::openLogFile() {
-  mode_t mode = readOnly_ ? S_IRUSR | S_IRGRP | S_IROTH : S_IRUSR | S_IWUSR| S_IRGRP | S_IROTH;
-  int flags = readOnly_ ? O_RDONLY : O_RDWR | O_CREAT | O_APPEND;
-  fd_ = ::open(filename_.c_str(), flags, mode);
+  mode_t mode = S_IRUSR| S_IWUSR| S_IRGRP | S_IROTH;
+  fd_ = ::open(filename_.c_str(), O_RDWR | O_CREAT | O_APPEND, mode);
 
   // make sure open call was successful
   if(fd_ == -1) {
     char errorMsg[1024];
     sprintf(errorMsg, "TFileTransport: Could not open file: %s", filename_.c_str());
-    GlobalOutput(errorMsg);
+    perror(errorMsg);
     throw TTransportException(errorMsg);
   }
 
-  // seek to the end of the file
-  offset_ = lseek(fd_, 0, SEEK_END);
+  // opening the file in append mode causes offset_t to be at the end
+  offset_ = lseek(fd_, 0, SEEK_CUR);
 }
 
 void TFileTransport::getNextFlushTime(struct timespec* ts_next_flush) {
@@ -786,7 +726,7 @@ TFileTransportBuffer::~TFileTransportBuffer() {
 
 bool TFileTransportBuffer::addEvent(eventInfo *event) {
   if (bufferMode_ == READ) {
-    GlobalOutput("Trying to write to a buffer in read mode");
+    perror("Trying to write to a buffer in read mode");
   }
   if (writePoint_ < size_) {
     buffer_[writePoint_++] = event;
@@ -890,7 +830,7 @@ void TFileProcessor::process(uint32_t numEvents, bool tail) {
       if (!tail) {
         break;
       }
-    } catch (TException &te) {
+    } catch (TException te) {
       cerr << te.what() << endl;
       break;
     }
@@ -919,7 +859,7 @@ void TFileProcessor::processChunk() {
       }
     } catch (TEOFException& teof) {
       break;
-    } catch (TException &te) {
+    } catch (TException te) {
       cerr << te.what() << endl;
       break;
     }

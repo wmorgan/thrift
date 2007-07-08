@@ -1,4 +1,4 @@
-#!/usr/local/bin/thrift -cpp -java -py -php -xsd -perl
+#!/usr/local/bin/thrift -cpp -java -py -php -xsd
 
 /**
  * This Thrift file can be included by other Thrift files that want to share

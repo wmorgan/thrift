@@ -10,12 +10,12 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/weak_ptr.hpp>
 
-namespace facebook { namespace thrift { namespace concurrency {
+namespace facebook { namespace thrift { namespace concurrency { 
 
 class Thread;
 
 /**
- * Minimal runnable class.  More or less analogous to java.lang.Runnable.
+ * Minimal runnable class.  More or less analogous to java.lang.Runnable. 
  *
  * @author marc
  * @version $Id:$
@@ -43,7 +43,7 @@ class Runnable {
 };
 
 /**
- * Minimal thread class. Returned by thread factory bound to a Runnable object
+ * Minimal thread class. Returned by thread factory bound to a Runnable object 
  * and ready to start execution.  More or less analogous to java.lang.Thread
  * (minus all the thread group, priority, mode and other baggage, since that
  * is difficult to abstract across platforms and is left for platform-specific
@@ -52,11 +52,8 @@ class Runnable {
  * @see facebook::thrift::concurrency::ThreadFactory)
  */
 class Thread {
-
+  
  public:
-
-  typedef uint64_t id_t;
-
   virtual ~Thread() {};
 
   /**
@@ -73,11 +70,6 @@ class Thread {
   virtual void join() = 0;
 
   /**
-   * Gets the thread's platform-specific ID
-   */
-  virtual id_t getId() = 0;
-
-  /**
    * Gets the runnable object this thread is hosting
    */
   virtual boost::shared_ptr<Runnable> runnable() const { return _runnable; }
@@ -87,7 +79,6 @@ class Thread {
 
  private:
   boost::shared_ptr<Runnable> _runnable;
-
 };
 
 /**
@@ -99,12 +90,6 @@ class ThreadFactory {
  public:
   virtual ~ThreadFactory() {}
   virtual boost::shared_ptr<Thread> newThread(boost::shared_ptr<Runnable> runnable) const = 0;
-
-  /** Gets the current thread id or unknown_thread_id if the current thread is not a thrift thread */
-
-  static const Thread::id_t unknown_thread_id;
-
-  virtual Thread::id_t getCurrentThreadId() const = 0;
 };
 
 }}} // facebook::thrift::concurrency

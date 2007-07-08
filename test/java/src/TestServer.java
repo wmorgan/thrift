@@ -3,7 +3,6 @@ package com.facebook.thrift.test;
 import com.facebook.thrift.TException;
 import com.facebook.thrift.protocol.TBinaryProtocol;
 import com.facebook.thrift.protocol.TProtocol;
-import com.facebook.thrift.protocol.TProtocolFactory;
 import com.facebook.thrift.server.TServer;
 import com.facebook.thrift.server.TSimpleServer;
 import com.facebook.thrift.server.TThreadPoolServer;
@@ -164,9 +163,6 @@ public class TestServer {
       goodbye.i64_thing = (long)4;
 
       Insanity crazy = new Insanity();
-      crazy.userMap = new HashMap<Integer, Long>();
-      crazy.xtructs = new ArrayList<Xtruct>();
-
       crazy.userMap.put(Numberz.EIGHT, (long)8);
       crazy.xtructs.add(goodbye);
 
@@ -251,17 +247,13 @@ public class TestServer {
       TServerSocket tServerSocket =
         new TServerSocket(port);
 
-      // Protocol factory
-      TProtocolFactory tProtocolFactory =
-        new TBinaryProtocol.Factory(true, true);
-
       TServer serverEngine;
 
       // Simple Server
       // serverEngine = new TSimpleServer(testProcessor, tServerSocket);
 
       // ThreadPool Server
-      serverEngine = new TThreadPoolServer(testProcessor, tServerSocket, tProtocolFactory);
+      serverEngine = new TThreadPoolServer(testProcessor, tServerSocket);
 
       // Run it
       System.out.println("Starting the server on port " + port + "...");

@@ -1,9 +1,3 @@
-// Copyright (c) 2006- Facebook
-// Distributed under the Thrift Software License
-//
-// See accompanying file LICENSE or visit the Thrift site at:
-// http://developers.facebook.com/thrift/
-
 #ifndef T_BASE_TYPE_H
 #define T_BASE_TYPE_H
 
@@ -54,15 +48,7 @@ class t_base_type : public t_type {
   }
 
   bool is_string_list() const {
-    return (base_ == TYPE_STRING) && string_list_;
-  }
-
-  void set_binary(bool val) {
-    binary_ = val;
-  }
-  
-  bool is_binary() const {
-    return (base_ == TYPE_STRING) && binary_;
+    return base_ == TYPE_STRING && string_list_;
   }
 
   void set_string_enum(bool val) {
@@ -89,7 +75,6 @@ class t_base_type : public t_type {
   t_base base_;
 
   bool string_list_;
-  bool binary_;
   bool string_enum_;
   std::vector<std::string> string_enum_vals_;
 };

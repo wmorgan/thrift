@@ -1,4 +1,4 @@
-#!/usr/local/bin/thrift -cpp -php -perl
+#!/usr/local/bin/thrift -cpp -py
 
 service ThreadsTest {
   i32 threadOne(1: i32 sleep=15),

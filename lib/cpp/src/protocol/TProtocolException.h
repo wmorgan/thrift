@@ -31,8 +31,7 @@ class TProtocolException : public facebook::thrift::TException {
     UNKNOWN = 0,
     INVALID_DATA = 1,
     NEGATIVE_SIZE = 2,
-    SIZE_LIMIT = 3,
-    BAD_VERSION = 4,
+    SIZE_LIMIT = 3
   };
 
   TProtocolException() :
@@ -43,11 +42,11 @@ class TProtocolException : public facebook::thrift::TException {
     facebook::thrift::TException(), 
     type_(type) {}
 
-  TProtocolException(const std::string& message) :
+  TProtocolException(const std::string message) :
     facebook::thrift::TException(message),
     type_(UNKNOWN) {}
 
-  TProtocolException(TProtocolExceptionType type, const std::string& message) :
+  TProtocolException(TProtocolExceptionType type, const std::string message) :
     facebook::thrift::TException(message),
     type_(type) {}
 

@@ -1,9 +1,3 @@
-// Copyright (c) 2006- Facebook
-// Distributed under the Thrift Software License
-//
-// See accompanying file LICENSE or visit the Thrift site at:
-// http://developers.facebook.com/thrift/
-
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sstream>
@@ -374,7 +368,7 @@ void t_java_generator::generate_java_struct_definition(ofstream &out,
   if (members.size() > 0) {
     out <<
       endl <<
-      indent() << "public final Isset __isset = new Isset();" << endl <<
+      indent() << "Isset __isset = new Isset();" << endl <<
       indent() << "public final class Isset {" << endl;
     indent_up();
       for (m_iter = members.begin(); m_iter != members.end(); ++m_iter) {
@@ -650,7 +644,7 @@ void t_java_generator::generate_java_struct_tostring(ofstream& out,
   indent_up();
 
   out <<
-    indent() << "StringBuilder sb = new StringBuilder(\"" << tstruct->get_name() << "(\");" << endl;
+    indent() << "StringBuffer sb = new StringBuffer(\"" << tstruct->get_name() << "(\");" << endl;
 
   const vector<t_field*>& fields = tstruct->get_members();
   vector<t_field*>::const_iterator f_iter;
@@ -1226,11 +1220,7 @@ void t_java_generator::generate_deserialize_field(ofstream& out,
           name;
         break;
       case t_base_type::TYPE_STRING:        
-        if (((t_base_type*)type)->is_binary()) {
-          out << "readBinary();";
-        } else {
-          out << "readString();";
-        }
+        out << "readString();";
         break;
       case t_base_type::TYPE_BOOL:
         out << "readBool();";
@@ -1293,22 +1283,19 @@ void t_java_generator::generate_deserialize_container(ofstream& out,
     obj = tmp("_list");
   }
 
+  indent(out) << prefix << " = new " << type_name(ttype, false, true) << "(); // from me" << endl;
+
   // Declare variables, read header
   if (ttype->is_map()) {
-    indent(out) << "TMap " << obj << " = iprot.readMapBegin();" << endl;
+    out <<
+      indent() << "TMap " << obj << " = iprot.readMapBegin();" << endl;
   } else if (ttype->is_set()) {
-    indent(out) << "TSet " << obj << " = iprot.readSetBegin();" << endl;
+    out <<
+      indent() << "TSet " << obj << " = iprot.readSetBegin();" << endl;
   } else if (ttype->is_list()) {
-    indent(out) << "TList " << obj << " = iprot.readListBegin();" << endl;
+    out <<
+      indent() << "TList " << obj << " = iprot.readListBegin();" << endl;
   }
-
-  indent(out)
-    << prefix << " = new " << type_name(ttype, false, true) 
-    // size the collection correctly
-    << "(" 
-    << (ttype->is_list() ? "" : "2*" )
-    << obj << ".size"
-    << ");" << endl;
 
   // For loop iterates over elements
   string i = tmp("_i");
@@ -1444,11 +1431,7 @@ void t_java_generator::generate_serialize_field(ofstream& out,
           "compiler error: cannot serialize void field in a struct: " + name;
         break;
       case t_base_type::TYPE_STRING:
-        if (((t_base_type*)type)->is_binary()) {
-          out << "writeBinary(" << name << ");";
-        } else {
-          out << "writeString(" << name << ");";
-        }
+        out << "writeString(" << name << ");";
         break;
       case t_base_type::TYPE_BOOL:
         out << "writeBool(" << name << ");";
@@ -1619,7 +1602,7 @@ string t_java_generator::type_name(t_type* ttype, bool in_container, bool in_ini
   }
 
   if (ttype->is_base_type()) {
-    return base_type_name((t_base_type*)ttype, in_container);
+    return base_type_name(((t_base_type*)ttype)->get_base(), in_container);
   } else if (ttype->is_enum()) {
     return (in_container ? "Integer" : "int");
   } else if (ttype->is_map()) {
@@ -1659,19 +1642,13 @@ string t_java_generator::type_name(t_type* ttype, bool in_container, bool in_ini
  * @param tbase The base type
  * @param container Is it going in a Java container?
  */
-string t_java_generator::base_type_name(t_base_type* type,
+string t_java_generator::base_type_name(t_base_type::t_base tbase,
                                         bool in_container) {
-  t_base_type::t_base tbase = type->get_base();
-
   switch (tbase) {
   case t_base_type::TYPE_VOID:
     return "void";
   case t_base_type::TYPE_STRING:
-    if (type->is_binary()) {
-      return "byte[]";
-    } else {
-      return "String";
-    }
+    return "String";
   case t_base_type::TYPE_BOOL:
     return "boolean";
   case t_base_type::TYPE_BYTE:

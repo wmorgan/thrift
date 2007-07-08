@@ -19,7 +19,6 @@ namespace facebook { namespace thrift { namespace transport {
  * TCP Socket implementation of the TTransport interface.
  *
  * @author Mark Slee <mcslee@facebook.com>
- * @author Aditya Agarwal <aditya@facebook.com>
  */
 class TSocket : public TTransport {
   /**
@@ -69,7 +68,7 @@ class TSocket : public TTransport {
    *
    * @throws TTransportException If the socket could not connect
    */
-  virtual void open();
+  void open();
 
   /**
    * Shuts down communications on the socket.
@@ -131,12 +130,6 @@ class TSocket : public TTransport {
    */
   void setSendTimeout(int ms);
 
-  /**
-   * Set the max number of recv retries in case of an EAGAIN
-   * error
-   */
-  void setMaxRecvRetries(int maxRecvRetries);
-
  protected:
   /**
    * Constructor to create socket from raw UNIX handle. Never called directly
@@ -170,9 +163,6 @@ class TSocket : public TTransport {
 
   /** Nodelay */
   bool noDelay_;
-
-  /** Recv EGAIN retries */
-  int maxRecvRetries_;
 
   /** Recv timeout timeval */
   struct timeval recvTimeval_;

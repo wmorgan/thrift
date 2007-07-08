@@ -16,7 +16,7 @@ namespace facebook { namespace thrift { namespace concurrency {
 
 using boost::shared_ptr;
 
-typedef std::multimap<int64_t, shared_ptr<TimerManager::Task> >::iterator task_iterator;
+typedef std::multimap<long long, shared_ptr<TimerManager::Task> >::iterator task_iterator;
 typedef std::pair<task_iterator, task_iterator> task_range;
 
 /**
@@ -40,6 +40,8 @@ class TimerManager::Task : public Runnable {
     state_(WAITING) {}
   
   ~Task() {
+    //debug
+    std::cerr << "TimerManager::Task.dtor[" << this << "]" << std::endl; 
   }
   
   void run() {
@@ -62,7 +64,10 @@ class TimerManager::Dispatcher: public Runnable {
   Dispatcher(TimerManager* manager) : 
     manager_(manager) {}
   
-  ~Dispatcher() {}
+  ~Dispatcher() {
+    // debug
+    std::cerr << "Dispatcher::dtor[" << this << "]" << std::endl;
+  }
   
   /**
    * Dispatcher entry point
@@ -84,17 +89,16 @@ class TimerManager::Dispatcher: public Runnable {
       {
         Synchronized s(manager_->monitor_);
 	task_iterator expiredTaskEnd;
-	int64_t now = Util::currentTime();
+	long long now = Util::currentTime();
 	while (manager_->state_ == TimerManager::STARTED && 
                (expiredTaskEnd = manager_->taskMap_.upper_bound(now)) == manager_->taskMap_.begin()) {
-	  int64_t timeout = 0LL;
+	  long long timeout = 0LL;
 	  if (!manager_->taskMap_.empty()) {
             timeout = manager_->taskMap_.begin()->first - now;
 	  }
-          assert((timeout != 0 && manager_->taskCount_ > 0) || (timeout == 0 && manager_->taskCount_ == 0));
-          try {
-            manager_->monitor_.wait(timeout);
-          } catch (TimedOutException &e) {}
+          bool ret = (timeout != 0 && manager_->taskCount_ > 0) || (timeout == 0 && manager_->taskCount_ == 0);
+          assert(ret);
+          manager_->monitor_.wait(timeout);
 	  now = Util::currentTime();
 	}
 	
@@ -143,11 +147,13 @@ TimerManager::~TimerManager() {
 
   // If we haven't been explicitly stopped, do so now.  We don't need to grab
   // the monitor here, since stop already takes care of reentrancy.
+  std::cerr << "TimerManager::dtor[" << this << "]" << std::endl;
   
   if (state_ != STOPPED) {
     try {
       stop();
     } catch(...) {
+      std::cerr << "TimerManager::dtor[" << this << "] uhoh " << std::endl;
       throw;
       // uhoh
     }
@@ -177,7 +183,8 @@ void TimerManager::start() {
     while (state_ == TimerManager::STARTING) {
       monitor_.wait();
     }
-    assert(state_ != TimerManager::STARTING);
+    bool ret = (state_ != TimerManager::STARTING);
+    assert(ret);
   }
 }
 
@@ -222,8 +229,8 @@ size_t TimerManager::taskCount() const {
   return taskCount_;
 }
       
-void TimerManager::add(shared_ptr<Runnable> task, int64_t timeout) {
-  int64_t now = Util::currentTime();
+void TimerManager::add(shared_ptr<Runnable> task, long long timeout) {
+  long long now = Util::currentTime();
   timeout += now;
 
   {
@@ -233,7 +240,7 @@ void TimerManager::add(shared_ptr<Runnable> task, int64_t timeout) {
     }
 
     taskCount_++;
-    taskMap_.insert(std::pair<int64_t, shared_ptr<Task> >(timeout, shared_ptr<Task>(new Task(task))));
+    taskMap_.insert(std::pair<long long, shared_ptr<Task> >(timeout, shared_ptr<Task>(new Task(task))));
 
     // If the task map was empty, or if we have an expiration that is earlier
     // than any previously seen, kick the dispatcher so it can update its
@@ -246,10 +253,10 @@ void TimerManager::add(shared_ptr<Runnable> task, int64_t timeout) {
 
 void TimerManager::add(shared_ptr<Runnable> task, const struct timespec& value) {
 
-  int64_t expiration;
+  long long expiration;
   Util::toMilliseconds(expiration, value);
 
-  int64_t now = Util::currentTime();
+  long long now = Util::currentTime();
 
   if (expiration < now) {
     throw  InvalidArgumentException();

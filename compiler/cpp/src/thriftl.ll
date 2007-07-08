@@ -1,12 +1,4 @@
 /**
- * Copyright (c) 2006- Facebook
- * Distributed under the Thrift Software License
- *
- * See accompanying file LICENSE or visit the Thrift site at:
- * http://developers.facebook.com/thrift/
- */
-
-/**
  * Thrift scanner.
  * 
  * Tokenizes a thrift definition file.
@@ -84,7 +76,6 @@ sliteral     ("'"[^']*"'")
 "i64"           { return tok_i64;           }
 "double"        { return tok_double;        }
 "string"        { return tok_string;        }
-"binary"        { return tok_binary;        }
 "slist"         { return tok_slist;         }
 "senum"         { return tok_senum;         }
 "map"           { return tok_map;           }

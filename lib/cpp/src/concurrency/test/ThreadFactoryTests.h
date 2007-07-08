@@ -4,7 +4,6 @@
 // See accompanying file LICENSE or visit the Thrift site at:
 // http://developers.facebook.com/thrift/
 
-#include <config.h>
 #include <concurrency/Thread.h>
 #include <concurrency/PosixThreadFactory.h>
 #include <concurrency/Monitor.h>
@@ -20,7 +19,7 @@ using boost::shared_ptr;
 using namespace facebook::thrift::concurrency;
 
 /**
- * ThreadManagerTests class
+ * ThreadManagerTests class 
  *
  * @author marc
  * @version $Id:$
@@ -30,7 +29,7 @@ class ThreadFactoryTests {
 public:
 
   static const double ERROR;
-
+  
   class Task: public Runnable {
 
   public:
@@ -47,7 +46,7 @@ public:
    */
   bool helloWorldTest() {
 
-    PosixThreadFactory threadFactory = PosixThreadFactory();
+    PosixThreadFactory threadFactory =  PosixThreadFactory();
 
     shared_ptr<Task> task = shared_ptr<Task>(new ThreadFactoryTests::Task());
 
@@ -66,20 +65,20 @@ public:
    * Reap N threads
    */
   class ReapNTask: public Runnable {
-
+    
    public:
-
+    
     ReapNTask(Monitor& monitor, int& activeCount) :
       _monitor(monitor),
       _count(activeCount) {}
-
+      
     void run() {
       Synchronized s(_monitor);
-
+      
       _count--;
-
+      
       //std::cout << "\t\t\tthread count: " << _count << std::endl;
-
+      
       if (_count == 0) {
         _monitor.notify();
       }
@@ -90,52 +89,35 @@ public:
     int& _count;
   };
 
-  bool reapNThreads(int loop=1, int count=10) {
-
-    PosixThreadFactory threadFactory =  PosixThreadFactory();
+  bool reapNThreads(int count=10) {
 
     Monitor* monitor = new Monitor();
 
-    for(int lix = 0; lix < loop; lix++) {
+    int* activeCount  = new int(count);
 
-      int* activeCount  = new int(count);
+    PosixThreadFactory threadFactory =  PosixThreadFactory();
 
-      std::set<shared_ptr<Thread> > threads;
+    std::set<shared_ptr<Thread> > threads;
 
-      int tix;
+    for (int ix = 0; ix < count; ix++) {
+      threads.insert(threadFactory.newThread(shared_ptr<Runnable>(new ReapNTask(*monitor, *activeCount))));
+    }
 
-      for (tix = 0; tix < count; tix++) {
-        try {
-          threads.insert(threadFactory.newThread(shared_ptr<Runnable>(new ReapNTask(*monitor, *activeCount))));
-        } catch(SystemResourceException& e) {
-          std::cout << "\t\t\tfailed to create " << lix * count + tix << " thread " << e.what() << std::endl;
-          throw e;
-        }
+    for (std::set<shared_ptr<Thread> >::const_iterator thread = threads.begin(); thread != threads.end(); thread++) {
+
+      (*thread)->start();
+    }
+
+
+    {
+      Synchronized s(*monitor);
+      while (*activeCount > 0) {
+	monitor->wait(1000);
       }
+    }
 
-      tix = 0;
-      for (std::set<shared_ptr<Thread> >::const_iterator thread = threads.begin(); thread != threads.end(); tix++, ++thread) {
-
-        try {
-          (*thread)->start();
-        } catch(SystemResourceException& e) {
-          std::cout << "\t\t\tfailed to start  " << lix * count + tix << " thread " << e.what() << std::endl;
-          throw e;
-        }
-      }
-
-      {
-        Synchronized s(*monitor);
-        while (*activeCount > 0) {
-          monitor->wait(1000);
-        }
-      }
-
-      for (std::set<shared_ptr<Thread> >::const_iterator thread = threads.begin(); thread != threads.end(); thread++) {
-        threads.erase(*thread);
-      }
-
-      std::cout << "\t\t\treaped " << lix * count << " threads" << std::endl;
+    for (std::set<shared_ptr<Thread> >::const_iterator thread = threads.begin(); thread != threads.end(); thread++) {
+      threads.erase(*thread);
     }
 
     std::cout << "\t\t\tSuccess!" << std::endl;
@@ -146,7 +128,7 @@ public:
   class SynchStartTask: public Runnable {
 
    public:
-
+    
     enum STATE {
       UNINITIALIZED,
       STARTING,
@@ -189,9 +171,9 @@ public:
   bool synchStartTest() {
 
     Monitor monitor;
-
+    
     SynchStartTask::STATE state = SynchStartTask::UNINITIALIZED;
-
+    
     shared_ptr<SynchStartTask> task = shared_ptr<SynchStartTask>(new SynchStartTask(monitor, state));
 
     PosixThreadFactory threadFactory =  PosixThreadFactory();
@@ -217,10 +199,7 @@ public:
     {
       Synchronized s(monitor);
 
-      try {
-          monitor.wait(100);
-      } catch(TimedOutException& e) {
-      }
+      monitor.wait(100);
 
       if (state == SynchStartTask::STARTED) {
 
@@ -228,7 +207,7 @@ public:
 
 	monitor.notify();
       }
-
+      
       while (state == SynchStartTask::STOPPING) {
 	monitor.wait();
       }
@@ -245,23 +224,20 @@ public:
 
   /** See how accurate monitor timeout is. */
 
-  bool monitorTimeoutTest(size_t count=1000, int64_t timeout=10) {
+  bool monitorTimeoutTest(size_t count=1000, long long timeout=10) {
 
     Monitor monitor;
 
-    int64_t startTime = Util::currentTime();
+    long long startTime = Util::currentTime();
 
     for (size_t ix = 0; ix < count; ix++) {
       {
         Synchronized s(monitor);
-        try {
-            monitor.wait(timeout);
-        } catch(TimedOutException& e) {
-        }
+	monitor.wait(timeout);
       }
     }
 
-    int64_t endTime = Util::currentTime();
+    long long endTime = Util::currentTime();
 
     double error = ((endTime - startTime) - (count * timeout)) / (double)(count * timeout);
 
@@ -273,67 +249,6 @@ public:
     bool success = error < ThreadFactoryTests::ERROR;
 
     std::cout << "\t\t\t" << (success ? "Success" : "Failure") << "! expected time: " << count * timeout << "ms elapsed time: "<< endTime - startTime << "ms error%: " << error * 100.0 << std::endl;
-
-    return success;
-  }
-
-
-  class FloodTask : public Runnable {
-  public:
-
-    FloodTask(const size_t id) :_id(id) {}
-    ~FloodTask(){
-      if(_id % 1000 == 0) {
-        std::cout << "\t\tthread " << _id << " done" << std::endl;
-      }
-    }
-
-    void run(){
-      if(_id % 1000 == 0) {
-        std::cout << "\t\tthread " << _id << " started" << std::endl;
-      }
-
-      usleep(1);
-    }
-    const size_t _id;
-  };
-
-  void foo(PosixThreadFactory *tf) {
-  }
-
-  bool floodNTest(size_t loop=1, size_t count=100000) {
-
-    bool success = false;
-
-    for(size_t lix = 0; lix < loop; lix++) {
-
-      PosixThreadFactory threadFactory = PosixThreadFactory();
-      threadFactory.setDetached(true);
-
-        for(size_t tix = 0; tix < count; tix++) {
-
-          try {
-
-            shared_ptr<FloodTask> task(new FloodTask(lix * count + tix ));
-
-            shared_ptr<Thread> thread = threadFactory.newThread(task);
-
-            thread->start();
-
-            usleep(1);
-
-          } catch (TException& e) {
-
-            std::cout << "\t\t\tfailed to start  " << lix * count + tix << " thread " << e.what() << std::endl;
-
-            return success;
-          }
-        }
-
-        std::cout << "\t\t\tflooded " << (lix + 1) * count << " threads" << std::endl;
-
-        success = true;
-    }
 
     return success;
   }

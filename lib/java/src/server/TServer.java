@@ -6,7 +6,7 @@
 
 package com.facebook.thrift.server;
 
-import com.facebook.thrift.TProcessorFactory;
+import com.facebook.thrift.TProcessor;
 import com.facebook.thrift.protocol.TBinaryProtocol;
 import com.facebook.thrift.protocol.TProtocolFactory;
 import com.facebook.thrift.transport.TServerTransport;
@@ -22,7 +22,7 @@ public abstract class TServer {
   /**
    * Core processor
    */
-  protected TProcessorFactory processorFactory_;
+  protected TProcessor processor_;
 
   /**
    * Server transport
@@ -53,9 +53,9 @@ public abstract class TServer {
    * Default constructors.
    */
 
-  protected TServer(TProcessorFactory processorFactory,
+  protected TServer(TProcessor processor,
                     TServerTransport serverTransport) {
-    this(processorFactory,
+    this(processor,
          serverTransport,         
          new TTransportFactory(),
          new TTransportFactory(),
@@ -63,10 +63,10 @@ public abstract class TServer {
          new TBinaryProtocol.Factory());
   }
 
-  protected TServer(TProcessorFactory processorFactory,
+  protected TServer(TProcessor processor,
                     TServerTransport serverTransport,
                     TTransportFactory transportFactory) {
-    this(processorFactory,
+    this(processor,
          serverTransport,
          transportFactory,
          transportFactory,
@@ -74,11 +74,11 @@ public abstract class TServer {
          new TBinaryProtocol.Factory());
   }
 
-  protected TServer(TProcessorFactory processorFactory,
+  protected TServer(TProcessor processor,
                     TServerTransport serverTransport,
                     TTransportFactory transportFactory,
                     TProtocolFactory protocolFactory) {
-    this(processorFactory,
+    this(processor,
          serverTransport,
          transportFactory,
          transportFactory,
@@ -86,13 +86,13 @@ public abstract class TServer {
          protocolFactory);
   }
 
-  protected TServer(TProcessorFactory processorFactory,
+  protected TServer(TProcessor processor,
                     TServerTransport serverTransport,
                     TTransportFactory inputTransportFactory,
                     TTransportFactory outputTransportFactory,
                     TProtocolFactory inputProtocolFactory,
                     TProtocolFactory outputProtocolFactory) {
-    processorFactory_ = processorFactory;
+    processor_ = processor;
     serverTransport_ = serverTransport;
     inputTransportFactory_ = inputTransportFactory;
     outputTransportFactory_ = outputTransportFactory;

@@ -318,12 +318,6 @@ class TMemoryBuffer : public TTransport {
 
   uint32_t read(uint8_t* buf, uint32_t len);
 
-  void readEnd() {
-    if (rPos_ == wPos_) {
-      resetBuffer();
-    }
-  }
-
   void write(const uint8_t* buf, uint32_t len);
 
   uint32_t available() {
@@ -429,13 +423,9 @@ class TPipedTransport : virtual public TTransport {
   uint32_t read(uint8_t* buf, uint32_t len);
 
   void readEnd() {
-
     if (pipeOnRead_) {
       dstTrans_->write(rBuf_, rLen_);
-      dstTrans_->flush();
     }
-
-    srcTrans_->readEnd();
 
     // reset state
     rLen_ = 0;
@@ -447,15 +437,10 @@ class TPipedTransport : virtual public TTransport {
   void writeEnd() {
     if (pipeOnWrite_) {
       dstTrans_->write(wBuf_, wLen_);
-      dstTrans_->flush();
     }
   }
 
   void flush();
-
-  boost::shared_ptr<TTransport> getTargetTransport() {
-    return dstTrans_;
-  } 
 
  protected:
   boost::shared_ptr<TTransport> srcTrans_;

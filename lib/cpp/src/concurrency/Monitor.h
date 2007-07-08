@@ -7,9 +7,7 @@
 #ifndef _THRIFT_CONCURRENCY_MONITOR_H_
 #define _THRIFT_CONCURRENCY_MONITOR_H_ 1
 
-#include "Exception.h"
-
-namespace facebook { namespace thrift { namespace concurrency {
+namespace facebook { namespace thrift { namespace concurrency { 
 
 /**
  * A monitor is a combination mutex and condition-event.  Waiting and
@@ -37,7 +35,7 @@ class Monitor {
 
   virtual void unlock() const;
 
-  virtual void wait(int64_t timeout=0LL) const;
+  virtual void wait(long long timeout=0LL) const;
 
   virtual void notify() const;
 
@@ -52,7 +50,7 @@ class Monitor {
 
 class Synchronized {
  public:
-
+  
  Synchronized(const Monitor& value) :
    monitor_(value) {
    monitor_.lock();

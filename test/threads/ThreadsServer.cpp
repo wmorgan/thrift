@@ -68,10 +68,7 @@ protected:
     Monitor m;
     for (int i = 0; i < seconds; ++i) {
       fprintf(stderr, "Thread %d: sleep %d\n", thread, i);
-      try {
-        m.wait(1000);
-      } catch(TimedOutException& e) {
-      }
+      m.wait(1000);
     }
     fprintf(stderr, "THREAD %d DONE\n", thread);
   }

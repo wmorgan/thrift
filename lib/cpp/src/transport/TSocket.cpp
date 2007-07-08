@@ -36,6 +36,9 @@ uint32_t g_socket_syscalls = 0;
 // Mutex to protect syscalls to netdb
 static Monitor s_netdb_monitor;
 
+// TODO(mcslee): Make this an option to the socket class
+#define MAX_RECV_RETRIES 20
+  
 TSocket::TSocket(string host, int port) : 
   host_(host),
   port_(port),
@@ -45,8 +48,7 @@ TSocket::TSocket(string host, int port) :
   recvTimeout_(0),
   lingerOn_(1),
   lingerVal_(0),
-  noDelay_(1),
-  maxRecvRetries_(5) {
+  noDelay_(1) {
   recvTimeval_.tv_sec = (int)(recvTimeout_/1000);
   recvTimeval_.tv_usec = (int)((recvTimeout_%1000)*1000);
 }
@@ -60,8 +62,7 @@ TSocket::TSocket() :
   recvTimeout_(0),
   lingerOn_(1),
   lingerVal_(0),
-  noDelay_(1),
-  maxRecvRetries_(5) {
+  noDelay_(1) {
   recvTimeval_.tv_sec = (int)(recvTimeout_/1000);
   recvTimeval_.tv_usec = (int)((recvTimeout_%1000)*1000);
 }
@@ -75,8 +76,7 @@ TSocket::TSocket(int socket) :
   recvTimeout_(0),
   lingerOn_(1),
   lingerVal_(0),
-  noDelay_(1),
-  maxRecvRetries_(5) {
+  noDelay_(1) {
   recvTimeval_.tv_sec = (int)(recvTimeout_/1000);
   recvTimeval_.tv_usec = (int)((recvTimeout_%1000)*1000);
 }
@@ -96,7 +96,7 @@ bool TSocket::peek() {
   uint8_t buf;
   int r = recv(socket_, &buf, 1, MSG_PEEK);
   if (r == -1) {
-    GlobalOutput("TSocket::peek()");
+    perror("TSocket::peek()");
     close();
     throw TTransportException(TTransportException::UNKNOWN, "recv() ERROR:" + errno);
   }
@@ -111,7 +111,7 @@ void TSocket::open() {
   // Create socket
   socket_ = socket(AF_INET, SOCK_STREAM, 0);
   if (socket_ == -1) {
-    GlobalOutput("TSocket::open() socket");
+    perror("TSocket::open() socket");
     close();
     throw TTransportException(TTransportException::NOT_OPEN, "socket() ERROR:" + errno);
   }
@@ -143,7 +143,7 @@ void TSocket::open() {
     struct hostent *host_entry = gethostbyname(host_.c_str());
     
     if (host_entry == NULL) {
-      GlobalOutput("TSocket: dns error: failed call to gethostbyname.");
+      perror("TSocket: dns error: failed call to gethostbyname.");
       close();
       throw TTransportException(TTransportException::NOT_OPEN, "gethostbyname() failed");
     }
@@ -181,7 +181,7 @@ void TSocket::open() {
     close();
     char buff[1024];
     sprintf(buff, "TSocket::open() connect %s %d", host_.c_str(), port_);
-    GlobalOutput(buff);
+    perror(buff);
     throw TTransportException(TTransportException::NOT_OPEN, "open() ERROR: " + errno);
   }
 
@@ -198,22 +198,22 @@ void TSocket::open() {
     int ret2 = getsockopt(socket_, SOL_SOCKET, SO_ERROR, (void *)&val, &lon);
     if (ret2 == -1) {
       close();
-      GlobalOutput("TSocket::open() getsockopt SO_ERROR");
+      perror("TSocket::open() getsockopt SO_ERROR");
       throw TTransportException(TTransportException::NOT_OPEN, "open() ERROR: " + errno);
     }
     if (val == 0) {
       goto done;
     }
     close();
-    GlobalOutput("TSocket::open() SO_ERROR was set");
+    perror("TSocket::open() SO_ERROR was set");
     throw TTransportException(TTransportException::NOT_OPEN, "open() ERROR: " + errno);
   } else if (ret == 0) {
     close();
-    GlobalOutput("TSocket::open() timeed out");
+    perror("TSocket::open() timeed out");
     throw TTransportException(TTransportException::NOT_OPEN, "open() ERROR: " + errno);   
   } else {
     close();
-    GlobalOutput("TSocket::open() select error");
+    perror("TSocket::open() select error");
     throw TTransportException(TTransportException::NOT_OPEN, "open() ERROR: " + errno);
   }
 
@@ -235,57 +235,28 @@ uint32_t TSocket::read(uint8_t* buf, uint32_t len) {
     throw TTransportException(TTransportException::NOT_OPEN, "Called read on non-open socket");
   }
 
-  int32_t retries = 0;
-
-  // EAGAIN can be signalled both when a timeout has occurred and when
-  // the system is out of resources (an awesome undocumented feature).
-  // The following is an approximation of the time interval under which
-  // EAGAIN is taken to indicate an out of resources error.
-  uint32_t eagainThresholdMicros = 0;
-  if (recvTimeout_) {
-    // if a readTimeout is specified along with a max number of recv retries, then 
-    // the threshold will ensure that the read timeout is not exceeded even in the
-    // case of resource errors
-    eagainThresholdMicros = (recvTimeout_*1000)/ ((maxRecvRetries_>0) ? maxRecvRetries_ : 2);
-  }
-
- try_again:  
+  uint32_t retries = 0;
+  
+ try_again:
   // Read from the socket
-  struct timeval begin;
-  gettimeofday(&begin, NULL);
   int got = recv(socket_, buf, len, 0);
-  struct timeval end;
-  gettimeofday(&end, NULL);
-  uint32_t readElapsedMicros =  (((end.tv_sec - begin.tv_sec) * 1000 * 1000)
-                                 + (((uint64_t)(end.tv_usec - begin.tv_usec))));
   ++g_socket_syscalls;
-
+  
   // Check for error on read
   if (got < 0) {   
-    if (errno == EAGAIN) {
-      // check if this is the lack of resources or timeout case
-      if (!eagainThresholdMicros || (readElapsedMicros < eagainThresholdMicros)) {
-        if (retries++ < maxRecvRetries_) {
-          usleep(50);
-          goto try_again;
-        } else {
-          throw TTransportException(TTransportException::TIMED_OUT, 
-                                    "EAGAIN (unavailable resources)");
-        }
-      } else {
-        // infer that timeout has been hit
-        throw TTransportException(TTransportException::TIMED_OUT, 
-                                  "EAGAIN (timed out)");
-      }
+    // If temporarily out of resources, sleep a bit and try again
+    if (errno == EAGAIN && retries++ < MAX_RECV_RETRIES) {
+      usleep(50);
+      goto try_again;
     }
     
     // If interrupted, try again
-    if (errno == EINTR && retries++ < maxRecvRetries_) {
+    if (errno == EINTR && retries++ < MAX_RECV_RETRIES) {
       goto try_again;
     }
     
     // Now it's not a try again case, but a real probblez
-    GlobalOutput("TSocket::read()");
+    perror("TSocket::read()");
 
     // If we disconnect with no linger time
     if (errno == ECONNRESET) {
@@ -303,9 +274,7 @@ uint32_t TSocket::read(uint8_t* buf, uint32_t len) {
     }
     
     // Some other error, whatevz
-    char buff[1024];
-    sprintf(buff, "ERROR errno: %d", errno);
-    throw TTransportException(TTransportException::UNKNOWN, buff);
+    throw TTransportException(TTransportException::UNKNOWN, "ERROR:" + errno);
   }
   
   // The remote host has closed the socket
@@ -354,7 +323,7 @@ void TSocket::write(const uint8_t* buf, uint32_t len) {
         throw TTransportException(TTransportException::NOT_OPEN, "ENOTCONN");
       }
 
-      GlobalOutput("TSocket::write() send < 0");
+      perror("TSocket::write() send < 0");
       throw TTransportException(TTransportException::UNKNOWN, "ERROR:" + errno);
     }
     
@@ -384,7 +353,7 @@ void TSocket::setLinger(bool on, int linger) {
   struct linger l = {(lingerOn_ ? 1 : 0), lingerVal_};
   int ret = setsockopt(socket_, SOL_SOCKET, SO_LINGER, &l, sizeof(l));
   if (ret == -1) {
-    GlobalOutput("TSocket::setLinger()");
+    perror("TSocket::setLinger()");
   }
 }
 
@@ -398,7 +367,7 @@ void TSocket::setNoDelay(bool noDelay) {
   int v = noDelay_ ? 1 : 0;
   int ret = setsockopt(socket_, IPPROTO_TCP, TCP_NODELAY, &v, sizeof(v));
   if (ret == -1) {
-    GlobalOutput("TSocket::setNoDelay()");
+    perror("TSocket::setNoDelay()");
   }
 }
 
@@ -418,7 +387,7 @@ void TSocket::setRecvTimeout(int ms) {
   struct timeval r = recvTimeval_;
   int ret = setsockopt(socket_, SOL_SOCKET, SO_RCVTIMEO, &r, sizeof(r));
   if (ret == -1) {
-    GlobalOutput("TSocket::setRecvTimeout()");
+    perror("TSocket::setRecvTimeout()");
   }
 }
 
@@ -432,12 +401,8 @@ void TSocket::setSendTimeout(int ms) {
                       (int)((sendTimeout_%1000)*1000)};
   int ret = setsockopt(socket_, SOL_SOCKET, SO_SNDTIMEO, &s, sizeof(s));
   if (ret == -1) {
-    GlobalOutput("TSocket::setSendTimeout()");
+    perror("TSocket::setSendTimeout()");
   }
-}
-
-void TSocket::setMaxRecvRetries(int maxRecvRetries) {
-  maxRecvRetries_ = maxRecvRetries;
 }
 
 }}} // facebook::thrift::transport

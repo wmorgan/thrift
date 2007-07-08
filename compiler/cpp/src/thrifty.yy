@@ -1,9 +1,4 @@
 %{
-// Copyright (c) 2006- Facebook
-// Distributed under the Thrift Software License
-//
-// See accompanying file LICENSE or visit the Thrift site at:
-// http://developers.facebook.com/thrift/
 
 /**
  * Thrift parser.
@@ -87,7 +82,6 @@ int y_field_val = -1;
 %token tok_bool
 %token tok_byte
 %token tok_string
-%token tok_binary
 %token tok_slist
 %token tok_senum
 %token tok_i16
@@ -797,11 +791,6 @@ BaseType:
     {
       pdebug("BaseType -> tok_string");
       $$ = g_type_string;
-    }
-| tok_binary
-    {
-      pdebug("BaseType -> tok_binary");
-      $$ = g_type_binary;
     }
 | tok_slist
     {

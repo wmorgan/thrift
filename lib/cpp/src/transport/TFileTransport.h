@@ -153,7 +153,7 @@ class TFileWriterTransport : virtual public TTransport {
 class TFileTransport : public TFileReaderTransport,
                        public TFileWriterTransport {
  public:
-  TFileTransport(std::string path, bool readOnly=false);
+  TFileTransport(std::string path);
   ~TFileTransport();
 
   // TODO: what is the correct behaviour for this?
@@ -162,7 +162,10 @@ class TFileTransport : public TFileReaderTransport,
     return true;
   }
   
-  void write(const uint8_t* buf, uint32_t len);
+  void write(const uint8_t* buf, uint32_t len) {
+    enqueueEvent(buf, len, false);
+  }
+  
   void flush();
 
   uint32_t readAll(uint8_t* buf, uint32_t len);
@@ -175,7 +178,7 @@ class TFileTransport : public TFileReaderTransport,
   uint32_t getCurChunk();
 
   // for changing the output file
-  void resetOutputFile(int fd, std::string filename, int64_t offset);
+  void resetOutputFile(int fd, std::string filename, long long offset);
 
   // Setter/Getter functions for user-controllable options
   void setReadBuffSize(uint32_t readBuffSize) {
@@ -207,7 +210,7 @@ class TFileTransport : public TFileReaderTransport,
 
   void setEventBufferSize(uint32_t bufferSize) {    
     if (bufferAndThreadInitialized_) {
-      GlobalOutput("Cannot change the buffer size after writer thread started");
+      perror("Cannot change the buffer size after writer thread started");
       return;
     }
     eventBufferSize_ = bufferSize;
@@ -357,12 +360,10 @@ class TFileTransport : public TFileReaderTransport,
   // event corruption information
   uint32_t lastBadChunk_;
   uint32_t numCorruptedEventsInChunk_;
-
-  bool readOnly_;
 };
 
 // Exception thrown when EOF is hit
-class TEOFException : public TTransportException {
+ class TEOFException : TTransportException {
  public:
   TEOFException():
     TTransportException(TTransportException::END_OF_FILE) {};

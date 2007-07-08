@@ -25,8 +25,6 @@ TServerSocket::TServerSocket(int port) :
   acceptBacklog_(1024),
   sendTimeout_(0),
   recvTimeout_(0),
-  retryLimit_(0),
-  retryDelay_(0),
   intSock1_(-1),
   intSock2_(-1) {}
 
@@ -36,8 +34,6 @@ TServerSocket::TServerSocket(int port, int sendTimeout, int recvTimeout) :
   acceptBacklog_(1024),
   sendTimeout_(sendTimeout),
   recvTimeout_(recvTimeout),
-  retryLimit_(0),
-  retryDelay_(0),
   intSock1_(-1),
   intSock2_(-1) {}
 
@@ -53,28 +49,20 @@ void TServerSocket::setRecvTimeout(int recvTimeout) {
   recvTimeout_ = recvTimeout;
 }
 
-void TServerSocket::setRetryLimit(int retryLimit) {
-  retryLimit_ = retryLimit;
-}
-
-void TServerSocket::setRetryDelay(int retryDelay) {
-  retryDelay_ = retryDelay;
-}
-
 void TServerSocket::listen() {
   int sv[2];
   if (-1 == socketpair(AF_LOCAL, SOCK_STREAM, 0, sv)) {
-    GlobalOutput("TServerSocket::init()");
+    perror("TServerSocket::init()");
     intSock1_ = -1;
     intSock2_ = -1;
   } else {
-    intSock1_ = sv[1];
-    intSock2_ = sv[0];
+    intSock1_ = sv[0];
+    intSock2_ = sv[1];
   }
 
   serverSocket_ = socket(AF_INET, SOCK_STREAM, 0);
   if (serverSocket_ == -1) {
-    GlobalOutput("TServerSocket::listen() socket");
+    perror("TServerSocket::listen() socket");
     close();
     throw TTransportException(TTransportException::NOT_OPEN, "Could not create server socket.");
   }
@@ -83,7 +71,7 @@ void TServerSocket::listen() {
   int one = 1;
   if (-1 == setsockopt(serverSocket_, SOL_SOCKET, SO_REUSEADDR,
                        &one, sizeof(one))) {
-    GlobalOutput("TServerSocket::listen() SO_REUSEADDR");
+    perror("TServerSocket::listen() SO_REUSEADDR");
     close();
     throw TTransportException(TTransportException::NOT_OPEN, "Could not set SO_REUSEADDR");
   }
@@ -92,7 +80,7 @@ void TServerSocket::listen() {
   #ifdef TCP_DEFER_ACCEPT
   if (-1 == setsockopt(serverSocket_, SOL_SOCKET, TCP_DEFER_ACCEPT,
                        &one, sizeof(one))) {
-    GlobalOutput("TServerSocket::listen() TCP_DEFER_ACCEPT");
+    perror("TServerSocket::listen() TCP_DEFER_ACCEPT");
     close();
     throw TTransportException(TTransportException::NOT_OPEN, "Could not set TCP_DEFER_ACCEPT");
   }
@@ -103,7 +91,7 @@ void TServerSocket::listen() {
   if (-1 == setsockopt(serverSocket_, SOL_SOCKET, SO_LINGER,
                        &ling, sizeof(ling))) {
     close();
-    GlobalOutput("TServerSocket::listen() SO_LINGER");
+    perror("TServerSocket::listen() SO_LINGER");
     throw TTransportException(TTransportException::NOT_OPEN, "Could not set SO_LINGER");
   }
 
@@ -111,7 +99,7 @@ void TServerSocket::listen() {
   if (-1 == setsockopt(serverSocket_, IPPROTO_TCP, TCP_NODELAY,
                        &one, sizeof(one))) {
     close();
-    GlobalOutput("setsockopt TCP_NODELAY");
+    perror("setsockopt TCP_NODELAY");
     throw TTransportException(TTransportException::NOT_OPEN, "Could not set TCP_NODELAY");
   }
 
@@ -125,36 +113,23 @@ void TServerSocket::listen() {
     throw TTransportException(TTransportException::NOT_OPEN, "fcntl() failed");
   }
 
-  // prepare the port information
+  // Bind to a port
   struct sockaddr_in addr;
   memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port_);
   addr.sin_addr.s_addr = INADDR_ANY;
-  
-  // we may want to try to bind more than once, since SO_REUSEADDR doesn't 
-  // always seem to work. The client can configure the retry variables.
-  int retries = 0;
-  do {
-    if (0 == bind(serverSocket_, (struct sockaddr *)&addr, sizeof(addr))) {
-      break;
-    }
-
-    // use short circuit evaluation here to only sleep if we need to
-  } while ((retries++ < retryLimit_) && (sleep(retryDelay_) == 0));
-
-  // throw an error if we failed to bind properly
-  if (retries > retryLimit_) {
+  if (-1 == bind(serverSocket_, (struct sockaddr *)&addr, sizeof(addr))) {
     char errbuf[1024];
     sprintf(errbuf, "TServerSocket::listen() BIND %d", port_);
-    GlobalOutput(errbuf);
+    perror(errbuf);
     close();
     throw TTransportException(TTransportException::NOT_OPEN, "Could not bind");
   }
 
   // Call listen
   if (-1 == ::listen(serverSocket_, acceptBacklog_)) {
-    GlobalOutput("TServerSocket::listen() LISTEN");
+    perror("TServerSocket::listen() LISTEN");
     close();
     throw TTransportException(TTransportException::NOT_OPEN, "Could not listen");
   }
@@ -169,9 +144,6 @@ shared_ptr<TTransport> TServerSocket::acceptImpl() {
 
   fd_set fds;
 
-  int maxEintrs = 5;
-  int numEintrs = 0;
-
   while (true) {
     FD_ZERO(&fds);
     FD_SET(serverSocket_, &fds);
@@ -181,20 +153,14 @@ shared_ptr<TTransport> TServerSocket::acceptImpl() {
     int ret = select(serverSocket_+1, &fds, NULL, NULL, NULL);
 
     if (ret < 0) {
-      // error cases
-      if (errno == EINTR && (numEintrs++ < maxEintrs)) {
-        // EINTR needs to be handled manually and we can tolerate 
-        // a certain number
-        continue;
-      }
-      GlobalOutput("TServerSocket::acceptImpl() select -1");
+      perror("TServerSocket::acceptImpl() select -1");
       throw TTransportException(TTransportException::UNKNOWN);
     } else if (ret > 0) {
       // Check for an interrupt signal
       if (intSock2_ >= 0 && FD_ISSET(intSock2_, &fds)) {      
         int8_t buf;
         if (-1 == recv(intSock2_, &buf, sizeof(int8_t), 0)) {
-          GlobalOutput("TServerSocket::acceptImpl() interrupt receive");
+          perror("TServerSocket::acceptImpl() interrupt receive");
         }
         throw TTransportException(TTransportException::INTERRUPTED);
       }
@@ -203,7 +169,7 @@ shared_ptr<TTransport> TServerSocket::acceptImpl() {
         break;
       }
     } else {
-      GlobalOutput("TServerSocket::acceptImpl() select 0");
+      perror("TServerSocket::acceptImpl() select 0");
       throw TTransportException(TTransportException::UNKNOWN);      
     }
   }
@@ -215,18 +181,18 @@ shared_ptr<TTransport> TServerSocket::acceptImpl() {
                               (socklen_t *) &size);
     
   if (clientSocket < 0) {
-    GlobalOutput("TServerSocket::accept()");
+    perror("TServerSocket::accept()");
     throw TTransportException(TTransportException::UNKNOWN, "ERROR:" + errno);
   }
 
   // Make sure client socket is blocking
   int flags = fcntl(clientSocket, F_GETFL, 0);
   if (flags == -1) {
-    GlobalOutput("TServerSocket::select() fcntl GETFL");
+    perror("TServerSocket::select() fcntl GETFL");
     throw TTransportException(TTransportException::UNKNOWN, "ERROR:" + errno);
   }
   if (-1 == fcntl(clientSocket, F_SETFL, flags & ~O_NONBLOCK)) {
-    GlobalOutput("TServerSocket::select() fcntl SETFL");
+    perror("TServerSocket::select() fcntl SETFL");
     throw TTransportException(TTransportException::UNKNOWN, "ERROR:" + errno);
   }
   
@@ -245,7 +211,7 @@ void TServerSocket::interrupt() {
   if (intSock1_ >= 0) {
     int8_t byte = 0;
     if (-1 == send(intSock1_, &byte, sizeof(int8_t), 0)) {
-      GlobalOutput("TServerSocket::interrupt()");
+      perror("TServerSocket::interrupt()");
     }
   }
 }

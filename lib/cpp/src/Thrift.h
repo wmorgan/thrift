@@ -7,14 +7,8 @@
 #ifndef _THRIFT_THRIFT_H_
 #define _THRIFT_THRIFT_H_ 1
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #include <netinet/in.h>
-#ifdef HAVE_INTTYPES_H
 #include <inttypes.h>
-#endif
 #include <string>
 #include <map>
 #include <list>
@@ -26,24 +20,6 @@
 
 namespace facebook { namespace thrift {
 
-class TOutput{
-public:
-  TOutput() : f_(perror) {}
-
-  inline void setOutputFunction(void (*function)(const char *)){
-    f_ = function;
-  }
-
-  inline void operator()(const char *message){
-    f_(message);
-  }
-
-private:
-  void (*f_)(const char *);
-};
-
-extern TOutput GlobalOutput;
-
 namespace protocol {
   class TProtocol;
 }
@@ -52,7 +28,7 @@ class TException : public std::exception {
 public:
   TException() {}
 
-  TException(const std::string& message) :
+  TException(const std::string message) :
     message_(message) {}
 
   virtual ~TException() throw() {}
@@ -93,12 +69,12 @@ public:
     TException(), 
     type_(type) {}
 
-  TApplicationException(const std::string& message) :
+  TApplicationException(const std::string message) :
     TException(message),
     type_(UNKNOWN) {}
 
   TApplicationException(TApplicationExceptionType type,
-                        const std::string& message) :
+                        const std::string message) :
     TException(message),
     type_(type) {}
 
@@ -122,8 +98,8 @@ public:
     }
   }
 
-  uint32_t read(protocol::TProtocol* iprot);
-  uint32_t write(protocol::TProtocol* oprot) const;
+  uint32_t TApplicationException::read(protocol::TProtocol* iprot);
+  uint32_t TApplicationException::write(protocol::TProtocol* oprot) const;
 
 protected:
   /**
