@@ -1,20 +1,6 @@
 ----------------
-Release 200705xx
+Release 20070401
 ----------------
-
-Simon Forman <sforman@gmail.com>
--TProcessorFactory abstraction for Java servers
-
-Jake Luciani <jakers@gmail.com>
--Perl code generation, libraries, test code
-
-David Reiss <dreiss@stanford.edu>
--strings.h include fix for bzero
--endianness fixes on TBinaryProtocol double serialization
--improved ntohll,htonll implementation
-
-Dan Li <dto@dev.java.net>
--Java TestServer and Tutorial Fixes
 
 Kevin Ko <kevin.s.ko@gmail.com>
 -Fix for unnecessary std::string copy construction in Protocol/Exception
@@ -22,7 +8,3 @@ Kevin Ko <kevin.s.ko@gmail.com>
 Paul Querna <pquerna@apache.org>
 -Autoconf error message fix for libevent detection
 -clock_gettime implementation for OSX
-
-----------------
-Release 20070401
-----------------
