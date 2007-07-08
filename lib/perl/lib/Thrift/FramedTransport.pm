@@ -73,18 +73,16 @@ sub close
 #
 sub read
 {
-
     my $self = shift;
     my $len  = shift;
 
-    if (!$self->{read}) {
+    unless($self->{read}) {
         return $self->{transport}->read($len);
     }
 
-    if (length($self->{rBuf}) == 0) {
+    if (length($self->{rBuf}) > 0) {
         $self->_readFrame();
     }
-
 
     # Just return full buff
     if ($len > length($self->{rBuf})) {
@@ -107,7 +105,7 @@ sub _readFrame
     my $self = shift;
     my $buf  = $self->{transport}->readAll(4);
     my @val  = unpack('N', $buf);
-    my $sz   = $val[0];
+    my $sz   = $val[1];
 
     $self->{rBuf} = $self->{transport}->readAll($sz);
 }
